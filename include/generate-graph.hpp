@@ -1,3 +1,5 @@
+#include <boost/graph/detail/adjacency_list.hpp>
+#include <boost/graph/subgraph.hpp>
 #include <cmath>
 #include <cstddef>
 #include <vector>
@@ -8,33 +10,27 @@
 #include <filesystem>
 #include <iostream>
 
-#include <boost/graph/adjacency_list.hpp>
-#include <boost/graph/graphviz.hpp>
-#include <boost/graph/subgraph.hpp>
+#include "graph.hpp"
 
-using namespace boost;
-using graph_t = boost::adjacency_list<>;
+namespace graph
+{
 
 class GraphRandomizer
 {
 private:
     std::random_device rd;
     std::mt19937 rg;
-    size_t min_vertex_number;
-    size_t max_vertex_number;
     size_t vertex_number;
     size_t max_edges_number;
     size_t adequate_number_of_edges;
 
 public:
-    GraphRandomizer(size_t min_vertex_number = 10, size_t max_vertex_number = 100)
-    : rg(rd()), min_vertex_number(min_vertex_number), max_vertex_number(max_vertex_number), vertex_number(get_random_unsigned_value_in_range(min_vertex_number, max_vertex_number)),
-      max_edges_number(vertex_number*(vertex_number-1)/2),
-      adequate_number_of_edges(get_adequate_number_of_edges(vertex_number))
-    {} 
+    GraphRandomizer()
+    : rg(rd())
+    {}
 
 private:
-    inline void update_random_values()
+    inline void update_random_values(size_t min_vertex_number, size_t max_vertex_number)
     {
       vertex_number = get_random_unsigned_value_in_range(min_vertex_number, max_vertex_number);
       max_edges_number = vertex_number*(vertex_number-1)/2;
@@ -67,46 +63,91 @@ private:
     }
 
 public:
-    inline graph_t get_random_graph()
+    inline graph_t get_random_graph(size_t min_vertex_number = 10, size_t max_vertex_number = 100)
     {
+      update_random_values(min_vertex_number, max_vertex_number);
+
       graph_t graph;
 
-      std::vector<decltype(add_vertex(graph))> vertices{vertex_number};
+      std::vector<decltype(add_vertex(property<vertex_name_t, std::string>("PIZDA"), graph))> vertices;
+      vertices.reserve(vertex_number);
 
-      for (auto&& it = 0lu, ite = vertex_number; it != ite; ++it)
-        vertices.push_back(add_vertex(graph));
+      // add ENTRY
+      vertices.push_back(add_vertex(property<vertex_name_t, std::string>("ENTRY"), graph));
 
-      for (auto&& it = 0lu, ite = vertices.size(); it != ite; ++it)
+      // add vertices 1..(n-1)
+      for (auto&& it = 1lu, ite = vertex_number - 1; it < ite; ++it)
+        vertices.push_back(add_vertex(property<vertex_name_t, std::string>(std::to_string(it)), graph));
+  
+      // add EXIT
+      vertices.push_back(add_vertex(property<vertex_name_t, std::string>("EXIT"), graph));
+
+      auto&& entry = vertices[0];
+      auto&& exit = vertices.back();
+
+      for (auto&& it = 1lu, ite = vertex_number - 1; it < ite; ++it)
       {
-        for (auto&& jt = it + 1; jt < ite; ++jt)
-        {
-          if (!will_generate_edge()) continue;
-          add_edge(vertices[it], vertices[jt], graph);
-        }
+          if (not will_generate_edge()) continue;
+          add_edge(entry, vertices[it], graph);
       }
 
-      update_random_values();
+      if (out_degree(entry, graph) == 0)
+        add_edge(entry, vertices[get_random_unsigned_value_in_range(1, vertex_number - 2)], graph);
+   
+      for (auto it = 1lu, ite = vertex_number - 1; it < ite; ++it)
+      {
+        auto&& vi = vertices[it];
+        for (auto jt = it + 1, jte = vertex_number - 1; jt < ite; ++jt)
+        {
+          auto&& vj = vertices[jt];
+          if (will_generate_edge())
+            add_edge(vi, vj, graph);
+          if (will_generate_edge())
+            add_edge(vj, vi, graph);
+        }
+
+        // this situations are almost impossible at big graphs
+        // for no separated vertices
+        if (out_degree(vi, graph) == 0)
+          add_edge(vi, exit, graph);
+        if (in_degree(vi, graph) == 0)
+          add_edge(entry, vi, graph);
+      }
+
+      for (auto it = 1lu, ite = vertex_number - 1; it < ite; ++it)
+      {
+        if (not will_generate_edge()) continue;
+        auto&& vi = vertices[it];
+        if (edge(vi, exit, graph).second) continue;
+        add_edge(vi, exit, graph);
+      }
+
+      if (in_degree(exit, graph) == 0)
+        add_edge(vertices[get_random_unsigned_value_in_range(1, vertex_number - 2)], exit, graph);
+
       return graph;
     }
 };
 
-inline void write_graph(graph_t const & graph, std::filesystem::path const& path)
+inline graph_t get_random_graph(unsigned min_vertex_number = 3, unsigned max_vertex_number = 10)
 {
-  std::string name = path.filename();
-  std::ofstream ofs{name+".dot"};
-  write_graphviz(ofs, graph);
-  std::string dot_command = "dot -Tsvg "+name+".dot > "+name+".svg";
-  std::system(dot_command.c_str());
-  std::cerr << "[info] graph was dumped in \""<<name<<".svg\""<<"\n";
+  return GraphRandomizer{}.get_random_graph(min_vertex_number, max_vertex_number);
 }
 
-// int main(int argc, char* argv[])
-// {
-//   GraphRandomizer graph_randomizer{0, 10};
+} /* namespace graph */
 
-//   auto&& graph = graph_randomizer.get_random_graph();
-//   write_graph(graph, "graph");
+// USAGE EXAMPLE:
+/*
+#include "write-graph.hpp"
+#include "generate-graph.hpp"
+
+int main(int argc, char* argv[])
+{
+  GraphRandomizer graph_randomizer{0, 10};
+
+  auto&& graph = graph_randomizer.get_random_graph();
+  write_graph(graph, "graph");
   
-//   return 0;
-// }
- 
+  return 0;
+}
+*/ 
