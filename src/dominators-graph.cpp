@@ -2,13 +2,14 @@
 #include "generate-graph.hpp"
 #include "write-graph.hpp"
 
-int main()
+int
+main()
 {
-    auto &&random_graph = graph::get_random_graph();
-    graph::write_graph(random_graph, "original-graph");
+  auto&& random_graph     = graph::get_random_graph();
+  auto&& dominators_graph = graph::get_dominators_graph(random_graph);
 
-    auto &&dominators_graph = graph::get_dominators_graph(random_graph);
-    graph::write_graph(dominators_graph, "dominators-graph");
+  graph::write_graph(random_graph, "original-graph");
+  graph::write_graph(dominators_graph, "dominators-graph");
 
-    return 0;
+  return 0;
 }

@@ -1,3 +1,5 @@
+#pragma once
+
 #include <boost/graph/subgraph.hpp>
 #include <cmath>
 #include <cstddef>

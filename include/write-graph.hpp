@@ -1,3 +1,5 @@
+#pragma once
+
 #include <boost/graph/graphviz.hpp>
 #include <filesystem>
 #include <string>

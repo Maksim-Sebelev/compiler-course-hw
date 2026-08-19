@@ -1,3 +1,5 @@
+#pragma once
+
 #include <boost/graph/transitive_closure.hpp>
 
 #include "copy-names.hpp"

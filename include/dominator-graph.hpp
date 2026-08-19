@@ -1,3 +1,5 @@
+#pragma once
+
 #include <algorithm>
 #include <boost/graph/adjacency_list.hpp>
 #include <boost/graph/graph_concepts.hpp>
@@ -17,41 +19,17 @@ namespace graph
 
 namespace detail
 {
-// я так рад, что живу в эпоху нейросетей и эти чудные строки, за меня может
-// написать мой чудный китайский друг
-
-struct vertex_hash
-{
-  std::size_t
-  operator ()(
-      graph_t::vertex_descriptor v
-  ) const
-  { return std::hash<graph_t::vertex_descriptor>()(v); }
-};
-
-struct vertex_equal
-{
-  bool
-  operator ()(
-      graph_t::vertex_descriptor a, graph_t::vertex_descriptor b
-  ) const
-  { return a == b; }
-};
-
-using vertex_set =
-    std::unordered_set<graph_t::vertex_descriptor, vertex_hash, vertex_equal>;
+using vertex_set = std::unordered_set<graph_t::vertex_descriptor>;
 }  // namespace detail
 
 inline
 graph_t
 get_dominators_graph(
-    graph_t const& g
+    graph_t const& g, bool ignore_self_domination = true
 )
 {
   // reverse graph - for comfortable work with vertex preds
-  graph_t reversed_graph = get_reversed_graph(g);
-  copy_vertices_names(g, reversed_graph);
-
+  graph_t                         reversed_graph = get_reversed_graph(g);
   auto&&                          vertices_range = vertices(reversed_graph);
   std::vector<detail::vertex_set> dominators(num_vertices(g));
 
@@ -74,9 +52,7 @@ get_dominators_graph(
     );
   }
 
-  bool changed = true;
-
-  while (changed)
+  for (bool changed = true; changed;)
   {
     changed = false;
     for (auto v : no_entry_vertices_range)
@@ -94,16 +70,6 @@ get_dominators_graph(
       {
         detail::vertex_set tmp_intersection;
         auto&&             pred_dominators = dominators[pred];
-
-        // жаль что здесь не std::set, а std::unordered_set, а так было бы
-        // приятнее здесь жить
-        //
-        // std::set_intersection(
-        //    new_dominators.begin(), new_dominators.end(),
-        //     pred_dominators.begin(), pred_dominators.end(),
-        //     std::inserter(intersection, intersection.begin())
-        // );
-
         // add d to dominators only if it contains in new_dominators and in
         // pred_dominators
         for (auto d : new_dominators)
@@ -111,14 +77,11 @@ get_dominators_graph(
           if (!pred_dominators.contains(d)) continue;
           tmp_intersection.insert(d);
         }
-
         // update new_dominators (was intersected with preds dominators)
         new_dominators = std::move(tmp_intersection);
       }
-
       // vertex is its own dominator
       new_dominators.insert(v);
-
       if (new_dominators == dominators[v]) continue;
       // update vertexs dominators if it was changed
       dominators[v] = std::move(new_dominators);
@@ -126,19 +89,24 @@ get_dominators_graph(
     }
   }
 
-  graph_t dominator_graph = get_reversed_graph(g);
+  graph_t dominator_graph{num_vertices(g)};
   copy_vertices_names(g, dominator_graph);
 
-  for (auto v : make_iterator_range(vertices(dominator_graph)))
-    clear_out_edges(v, dominator_graph);
-
-  for (auto v : make_iterator_range(vertices_range))
+  if (ignore_self_domination)
   {
-    for (auto dom : dominators[v])
+    for (auto v : make_iterator_range(vertices_range))
     {
-      if (dom == v) continue;  // ignore self-domination
-      add_edge(dom, v, dominator_graph);
+      for (auto dom : dominators[v])
+      {
+        if (dom == v) continue;
+        add_edge(dom, v, dominator_graph);
+      }
     }
+  }
+  else
+  {
+    for (auto v : make_iterator_range(vertices_range))
+      for (auto dom : dominators[v]) add_edge(dom, v, dominator_graph);
   }
 
   return dominator_graph;
